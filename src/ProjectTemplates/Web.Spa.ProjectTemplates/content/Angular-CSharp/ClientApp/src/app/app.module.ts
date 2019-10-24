@@ -9,11 +9,11 @@ import { NavMenuComponent } from './nav-menu/nav-menu.component';
 import { HomeComponent } from './home/home.component';
 import { CounterComponent } from './counter/counter.component';
 import { FetchDataComponent } from './fetch-data/fetch-data.component';
-////#if (IndividualLocalAuth)
+//// #if (IndividualLocalAuth)
 import { ApiAuthorizationModule } from 'src/api-authorization/api-authorization.module';
 import { AuthorizeGuard } from 'src/api-authorization/authorize.guard';
 import { AuthorizeInterceptor } from 'src/api-authorization/authorize.interceptor';
-////#endif
+//// #endif
 
 @NgModule({
   declarations: [
@@ -27,26 +27,26 @@ import { AuthorizeInterceptor } from 'src/api-authorization/authorize.intercepto
     BrowserModule.withServerTransition({ appId: 'ng-cli-universal' }),
     HttpClientModule,
     FormsModule,
-    ////#if (IndividualLocalAuth)
+    //// #if (IndividualLocalAuth)
     ApiAuthorizationModule,
-    ////#endif
+    //// #endif
     RouterModule.forRoot([
       { path: '', component: HomeComponent, pathMatch: 'full' },
       { path: 'counter', component: CounterComponent },
-      ////#if (IndividualLocalAuth)
+      //// #if (IndividualLocalAuth)
       { path: 'fetch-data', component: FetchDataComponent, canActivate: [AuthorizeGuard] },
-      ////#else
+      //// #else
       { path: 'fetch-data', component: FetchDataComponent },
-      ////#endif
+      //// #endif
     ])
   ],
-  ////#if (IndividualLocalAuth)
+  //// #if (IndividualLocalAuth)
   providers: [
     { provide: HTTP_INTERCEPTORS, useClass: AuthorizeInterceptor, multi: true }
   ],
-  ////#else
+  //// #else
   providers: [],
-  ////#endif
+  //// #endif
   bootstrap: [AppComponent]
 })
 export class AppModule { }
