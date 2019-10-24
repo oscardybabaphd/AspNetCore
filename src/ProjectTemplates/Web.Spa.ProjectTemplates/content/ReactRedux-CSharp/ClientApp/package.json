@@ -17,10 +17,11 @@
     "react-scripts": "^3.0.1",
     "reactstrap": "7.0.2",
     "redux": "4.0.1",
-    "redux-thunk": "2.3.0",
-    "typescript": "3.2.2"
+    "redux-thunk": "2.3.0"
   },
   "devDependencies": {
+    "typescript": "3.2.2",
+    "@typescript-eslint/parser": "^2.5.0",
     "@types/history": "4.7.2",
     "@types/jest": "23.3.11",
     "@types/node": "10.12.18",
