@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.IO;
+using System.IO.Pipelines;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -64,8 +65,10 @@ namespace Microsoft.AspNetCore.TestHost
 
             var contextBuilder = new HttpContextBuilder(_application, AllowSynchronousIO, PreserveExecutionContext);
 
+            var requestPipe = new Pipe();
+
             var requestContent = request.Content ?? new StreamContent(Stream.Null);
-            var body = await requestContent.ReadAsStreamAsync();
+
             contextBuilder.Configure(context =>
             {
                 var req = context.Request;
@@ -115,12 +118,19 @@ namespace Microsoft.AspNetCore.TestHost
                     }
                 }
 
-                if (body.CanSeek)
+                //if (body.CanSeek)
+                //{
+                //    // This body may have been consumed before, rewind it.
+                //    body.Seek(0, SeekOrigin.Begin);
+                //}
+
+                _ = Task.Run(async () =>
                 {
-                    // This body may have been consumed before, rewind it.
-                    body.Seek(0, SeekOrigin.Begin);
-                }
-                req.Body = new AsyncStreamWrapper(body, () => contextBuilder.AllowSynchronousIO);
+                    await requestContent.CopyToAsync(requestPipe.Writer.AsStream());
+                    await requestPipe.Writer.CompleteAsync();
+                });
+
+                req.Body = new AsyncStreamWrapper(requestPipe.Reader.AsStream(), () => contextBuilder.AllowSynchronousIO);
             });
 
             var response = new HttpResponseMessage();

@@ -5,6 +5,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.WebSockets;
 using System.Text;
@@ -13,6 +14,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Internal;
 using Microsoft.AspNetCore.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -114,10 +116,10 @@ namespace Microsoft.AspNetCore.TestHost
 
             // Act
             var content = new StringContent("Hello world");
-            var response = await client.PostAsync("http://localhost:12345", content);
+            var response = await client.PostAsync("http://localhost:12345", content).WithTimeout();
 
             // Assert
-            Assert.Equal("Hello world POST Response", await response.Content.ReadAsStringAsync());
+            Assert.Equal("Hello world POST Response", await response.Content.ReadAsStringAsync().WithTimeout());
         }
 
         [Fact]
@@ -159,6 +161,99 @@ namespace Microsoft.AspNetCore.TestHost
             public void Dispose()
             {
                 IsDisposed = true;
+            }
+        }
+
+        [Fact]
+        public async Task ClientStreamingWorks()
+        {
+            // Arrange
+            var responseStartedSyncPoint = new SyncPoint();
+            var requestEndingSyncPoint = new SyncPoint();
+
+            RequestDelegate appDelegate = async ctx =>
+            {
+                await Task.Yield();
+
+                // Sending content will send the headers
+                await ctx.Response.WriteAsync("STARTED");
+
+                await responseStartedSyncPoint.WaitToContinue();
+
+                // ReadToEndAsync will wait until request body is complete
+                var requestString = await new StreamReader(ctx.Request.Body).ReadToEndAsync();
+                await ctx.Response.WriteAsync(requestString + " POST Response");
+
+                await requestEndingSyncPoint.WaitToContinue();
+            };
+
+            Stream requestStream = null;
+            var requestCompleteTcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var builder = new WebHostBuilder().Configure(app => app.Run(appDelegate));
+            var server = new TestServer(builder);
+            var client = server.CreateClient();
+
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, "http://localhost:12345");
+            httpRequest.Version = new Version(2, 0);
+            httpRequest.Content = new PushContent(async stream =>
+            {
+                // Initial flush to ensure headers are sent
+                await stream.FlushAsync();
+
+                requestStream = stream;
+                await requestCompleteTcs.Task;
+            });
+
+            // Act
+            var response = await client.SendAsync(httpRequest).WithTimeout();
+
+            await responseStartedSyncPoint.WaitForSyncPoint().WithTimeout();
+            responseStartedSyncPoint.Continue();
+
+            var responseContent = await response.Content.ReadAsStreamAsync().WithTimeout();
+
+            // Assert
+            byte[] buffer = new byte[1024];
+            var length = await responseContent.ReadAsync(buffer).AsTask().WithTimeout();
+            Assert.Equal("STARTED", Encoding.UTF8.GetString(buffer, 0, length));
+
+            // Send content and finish request body
+            await requestStream.WriteAsync(Encoding.UTF8.GetBytes("Hello world")).AsTask().WithTimeout();
+            await requestStream.FlushAsync().WithTimeout();
+            requestCompleteTcs.SetResult(null);
+
+            // Ensure content is received while request is in progress
+            length = await responseContent.ReadAsync(buffer).AsTask().WithTimeout();
+            Assert.Equal("Hello world POST Response", Encoding.UTF8.GetString(buffer, 0, length));
+
+            // Request is ending
+            await requestEndingSyncPoint.WaitForSyncPoint().WithTimeout();
+            requestEndingSyncPoint.Continue();
+
+            // No more response content
+            length = await responseContent.ReadAsync(buffer).AsTask().WithTimeout();
+            Assert.Equal(-1, length);
+        }
+
+        private class PushContent : HttpContent
+        {
+            private readonly Func<Stream, Task> _sendContent;
+
+            public PushContent(Func<Stream, Task> sendContent)
+            {
+                _sendContent = sendContent;
+            }
+
+            protected override Task SerializeToStreamAsync(Stream stream, TransportContext context)
+            {
+                return _sendContent(stream);
+            }
+
+            protected override bool TryComputeLength(out long length)
+            {
+                length = -1;
+                return false;
             }
         }
 
