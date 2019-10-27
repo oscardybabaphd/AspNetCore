@@ -132,8 +132,15 @@ namespace Microsoft.AspNetCore.TestHost
 
                 _ = Task.Run(async () =>
                 {
-                    await requestContent.CopyToAsync(requestPipe.Writer.AsStream());
-                    await requestPipe.Writer.CompleteAsync();
+                    try
+                    {
+                        await requestContent.CopyToAsync(requestPipe.Writer.AsStream());
+                        await requestPipe.Writer.CompleteAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        await requestPipe.Writer.CompleteAsync(ex);
+                    }
                 });
 
                 req.Body = new AsyncStreamWrapper(requestPipe.Reader.AsStream(), () => contextBuilder.AllowSynchronousIO);
