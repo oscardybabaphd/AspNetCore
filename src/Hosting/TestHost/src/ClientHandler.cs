@@ -67,25 +67,31 @@ namespace Microsoft.AspNetCore.TestHost
 
             var requestContent = request.Content ?? new StreamContent(Stream.Null);
 
-            // This is odd but required for backwards compat.
-            // If StreamContent is passed in then seek to beginning.
-            if (requestContent is StreamContent)
-            {
-                var body = await requestContent.ReadAsStreamAsync();
-                if (body.CanSeek)
-                {
-                    // This body may have been consumed before, rewind it.
-                    body.Seek(0, SeekOrigin.Begin);
-                }
-            }
-
             var requestPipe = new Pipe();
 
             var copyRequestTask = Task.Run(async () =>
             {
                 try
                 {
-                    await requestContent.CopyToAsync(requestPipe.Writer.AsStream());
+                    if (requestContent is StreamContent)
+                    {
+                        // This is odd but required for backwards compat.
+                        // If StreamContent is passed in then seek to beginning.
+                        // ReadAsStreamAsync doesn't block. It will return the inner stream.
+                        var body = await requestContent.ReadAsStreamAsync();
+                        if (body.CanSeek)
+                        {
+                            // This body may have been consumed before, rewind it.
+                            body.Seek(0, SeekOrigin.Begin);
+                        }
+
+                        await body.CopyToAsync(requestPipe.Writer);
+                    }
+                    else
+                    {
+                        await requestContent.CopyToAsync(requestPipe.Writer.AsStream());
+                    }
+
                     await requestPipe.Writer.CompleteAsync();
                 }
                 catch (Exception ex)
