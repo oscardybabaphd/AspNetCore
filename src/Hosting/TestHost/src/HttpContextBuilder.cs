@@ -27,6 +27,7 @@ namespace Microsoft.AspNetCore.TestHost
         private bool _returningResponse;
         private object _testContext;
         private Func<HttpContext, Task> _responseReadCompleteCallback;
+        private Action _clientAbortCallback;
 
         internal HttpContextBuilder(ApplicationWrapper application, bool allowSynchronousIO, bool preserveExecutionContext)
         {
@@ -69,6 +70,11 @@ namespace Microsoft.AspNetCore.TestHost
         internal void RegisterResponseReadCompleteCallback(Func<HttpContext, Task> responseReadCompleteCallback)
         {
             _responseReadCompleteCallback = responseReadCompleteCallback;
+        }
+
+        internal void RegisterClientAbortCallback(Action clientAbortCallback)
+        {
+            _clientAbortCallback = clientAbortCallback;
         }
 
         /// <summary>
@@ -136,6 +142,7 @@ namespace Microsoft.AspNetCore.TestHost
             }
             // Writes will still succeed, the app will only get an error if they check the CT.
             _responseReaderStream.Abort(new IOException("The client aborted the request."));
+            _clientAbortCallback?.Invoke();
         }
 
         internal async Task CompleteResponseAsync()

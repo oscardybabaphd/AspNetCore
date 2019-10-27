@@ -173,12 +173,13 @@ namespace Microsoft.AspNetCore.TestHost
 
             RequestDelegate appDelegate = async ctx =>
             {
-                await Task.Yield();
+                // Send headers
+                await ctx.Response.BodyWriter.FlushAsync();
 
-                // Sending content will send the headers
-                await ctx.Response.WriteAsync("STARTED");
-
+                // Ensure headers received by client
                 await responseStartedSyncPoint.WaitToContinue();
+
+                await ctx.Response.WriteAsync("STARTED");
 
                 // ReadToEndAsync will wait until request body is complete
                 var requestString = await new StreamReader(ctx.Request.Body).ReadToEndAsync();
@@ -234,6 +235,83 @@ namespace Microsoft.AspNetCore.TestHost
             // No more response content
             length = await responseContent.ReadAsync(buffer).AsTask().WithTimeout();
             Assert.Equal(0, length);
+        }
+
+        [Fact]
+        public async Task ClientStreaming_Cancellation()
+        {
+            // Arrange
+            var responseStartedSyncPoint = new SyncPoint();
+            var responseReadSyncPoint = new SyncPoint();
+            var responseEndingSyncPoint = new SyncPoint();
+            var readCanceled = false;
+
+            RequestDelegate appDelegate = async ctx =>
+            {
+                // Send headers
+                await ctx.Response.BodyWriter.FlushAsync();
+
+                // Ensure headers received by client
+                await responseStartedSyncPoint.WaitToContinue();
+
+                var serverBuffer = new byte[1024];
+                var serverLength = await ctx.Request.Body.ReadAsync(serverBuffer);
+
+                Assert.Equal("SENT", Encoding.UTF8.GetString(serverBuffer, 0, serverLength));
+
+                await responseReadSyncPoint.WaitToContinue();
+
+                try
+                {
+                    await ctx.Request.Body.ReadAsync(serverBuffer);
+                }
+                catch (OperationCanceledException)
+                {
+                    readCanceled = true;
+                }
+
+                await responseEndingSyncPoint.WaitToContinue();
+            };
+
+            Stream requestStream = null;
+            var requestCompleteTcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var builder = new WebHostBuilder().Configure(app => app.Run(appDelegate));
+            var server = new TestServer(builder);
+            var client = server.CreateClient();
+
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, "http://localhost:12345");
+            httpRequest.Version = new Version(2, 0);
+            httpRequest.Content = new PushContent(async stream =>
+            {
+                // Initial flush to ensure headers are sent
+                await stream.FlushAsync();
+
+                requestStream = stream;
+                await requestCompleteTcs.Task;
+            });
+
+            // Act
+            var response = await client.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead).WithTimeout();
+
+            await responseStartedSyncPoint.WaitForSyncPoint().WithTimeout();
+            responseStartedSyncPoint.Continue();
+
+            var responseContent = await response.Content.ReadAsStreamAsync().WithTimeout();
+
+            // Assert
+            await requestStream.WriteAsync(Encoding.UTF8.GetBytes("SENT")).AsTask().WithTimeout();
+            await requestStream.FlushAsync().WithTimeout();
+            await responseReadSyncPoint.WaitForSyncPoint().WithTimeout();
+
+            // Cancel request. Disposing response must be used because SendAsync has finished.
+            response.Dispose();
+            responseReadSyncPoint.Continue();
+
+            await responseEndingSyncPoint.WaitForSyncPoint().WithTimeout();
+            responseEndingSyncPoint.Continue();
+
+            Assert.True(readCanceled);
         }
 
         private class PushContent : HttpContent

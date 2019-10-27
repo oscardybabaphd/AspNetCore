@@ -175,6 +175,12 @@ namespace Microsoft.AspNetCore.TestHost
                 }
             });
 
+            contextBuilder.RegisterClientAbortCallback(() =>
+            {
+                requestPipe.Writer.CancelPendingFlush();
+                requestPipe.Reader.CancelPendingRead();
+            });
+
             var httpContext = await contextBuilder.SendAsync(cancellationToken);
 
             response.StatusCode = (HttpStatusCode)httpContext.Response.StatusCode;
