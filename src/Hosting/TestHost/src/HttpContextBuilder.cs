@@ -26,7 +26,7 @@ namespace Microsoft.AspNetCore.TestHost
         private bool _pipelineFinished;
         private bool _returningResponse;
         private object _testContext;
-        private Action<HttpContext> _responseReadCompleteCallback;
+        private Func<HttpContext, Task> _responseReadCompleteCallback;
 
         internal HttpContextBuilder(ApplicationWrapper application, bool allowSynchronousIO, bool preserveExecutionContext)
         {
@@ -42,7 +42,7 @@ namespace Microsoft.AspNetCore.TestHost
             request.Method = HttpMethods.Get;
 
             var pipe = new Pipe();
-            _responseReaderStream = new ResponseBodyReaderStream(pipe, ClientInitiatedAbort, () => _responseReadCompleteCallback?.Invoke(_httpContext));
+            _responseReaderStream = new ResponseBodyReaderStream(pipe, ClientInitiatedAbort, () => _responseReadCompleteCallback?.Invoke(_httpContext) ?? Task.CompletedTask);
             _responsePipeWriter = new ResponseBodyPipeWriter(pipe, ReturnResponseMessageAsync);
             _responseFeature.Body = new ResponseBodyWriterStream(_responsePipeWriter, () => AllowSynchronousIO);
             _responseFeature.BodyWriter = _responsePipeWriter;
@@ -66,7 +66,7 @@ namespace Microsoft.AspNetCore.TestHost
             configureContext(_httpContext);
         }
 
-        internal void RegisterResponseReadCompleteCallback(Action<HttpContext> responseReadCompleteCallback)
+        internal void RegisterResponseReadCompleteCallback(Func<HttpContext, Task> responseReadCompleteCallback)
         {
             _responseReadCompleteCallback = responseReadCompleteCallback;
         }

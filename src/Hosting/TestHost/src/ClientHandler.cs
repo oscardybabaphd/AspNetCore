@@ -79,6 +79,21 @@ namespace Microsoft.AspNetCore.TestHost
                 }
             }
 
+            var requestPipe = new Pipe();
+
+            var copyRequestTask = Task.Run(async () =>
+            {
+                try
+                {
+                    await requestContent.CopyToAsync(requestPipe.Writer.AsStream());
+                    await requestPipe.Writer.CompleteAsync();
+                }
+                catch (Exception ex)
+                {
+                    await requestPipe.Writer.CompleteAsync(ex);
+                }
+            });
+
             contextBuilder.Configure(context =>
             {
                 var req = context.Request;
@@ -128,35 +143,30 @@ namespace Microsoft.AspNetCore.TestHost
                     }
                 }
 
-                var requestPipe = new Pipe();
-
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await requestContent.CopyToAsync(requestPipe.Writer.AsStream());
-                        await requestPipe.Writer.CompleteAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        await requestPipe.Writer.CompleteAsync(ex);
-                    }
-                });
-
                 req.Body = new AsyncStreamWrapper(requestPipe.Reader.AsStream(), () => contextBuilder.AllowSynchronousIO);
             });
 
             var response = new HttpResponseMessage();
 
             // Copy trailers to the response message when the response stream is complete
-            contextBuilder.RegisterResponseReadCompleteCallback(context =>
+            contextBuilder.RegisterResponseReadCompleteCallback(async context =>
             {
-                var responseTrailersFeature = context.Features.Get<IHttpResponseTrailersFeature>();
-
-                foreach (var trailer in responseTrailersFeature.Trailers)
+                try
                 {
-                    bool success = response.TrailingHeaders.TryAddWithoutValidation(trailer.Key, (IEnumerable<string>)trailer.Value);
-                    Contract.Assert(success, "Bad trailer");
+                    var responseTrailersFeature = context.Features.Get<IHttpResponseTrailersFeature>();
+
+                    foreach (var trailer in responseTrailersFeature.Trailers)
+                    {
+                        bool success = response.TrailingHeaders.TryAddWithoutValidation(trailer.Key, (IEnumerable<string>)trailer.Value);
+                        Contract.Assert(success, "Bad trailer");
+                    }
+
+                    await copyRequestTask;
+                    await requestPipe.Reader.CompleteAsync();
+                }
+                catch (Exception ex)
+                {
+                    await requestPipe.Reader.CompleteAsync(ex);
                 }
             });
 

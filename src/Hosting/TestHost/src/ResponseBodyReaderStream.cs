@@ -21,10 +21,10 @@ namespace Microsoft.AspNetCore.TestHost
         private Exception _abortException;
 
         private readonly Action _abortRequest;
-        private readonly Action _readComplete;
+        private readonly Func<Task> _readComplete;
         private readonly Pipe _pipe;
 
-        internal ResponseBodyReaderStream(Pipe pipe, Action abortRequest, Action readComplete)
+        internal ResponseBodyReaderStream(Pipe pipe, Action abortRequest, Func<Task> readComplete)
         {
             _pipe = pipe ?? throw new ArgumentNullException(nameof(pipe));
             _abortRequest = abortRequest ?? throw new ArgumentNullException(nameof(abortRequest));
@@ -87,7 +87,7 @@ namespace Microsoft.AspNetCore.TestHost
 
             if (result.Buffer.IsEmpty && result.IsCompleted)
             {
-                _readComplete();
+                await _readComplete();
                 _readerComplete = true;
                 return 0;
             }
