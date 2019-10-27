@@ -65,9 +65,19 @@ namespace Microsoft.AspNetCore.TestHost
 
             var contextBuilder = new HttpContextBuilder(_application, AllowSynchronousIO, PreserveExecutionContext);
 
-            var requestPipe = new Pipe();
-
             var requestContent = request.Content ?? new StreamContent(Stream.Null);
+
+            // This is odd but required for backwards compat.
+            // If StreamContent is passed in then seek to beginning.
+            if (requestContent is StreamContent)
+            {
+                var body = await requestContent.ReadAsStreamAsync();
+                if (body.CanSeek)
+                {
+                    // This body may have been consumed before, rewind it.
+                    body.Seek(0, SeekOrigin.Begin);
+                }
+            }
 
             contextBuilder.Configure(context =>
             {
@@ -118,11 +128,7 @@ namespace Microsoft.AspNetCore.TestHost
                     }
                 }
 
-                //if (body.CanSeek)
-                //{
-                //    // This body may have been consumed before, rewind it.
-                //    body.Seek(0, SeekOrigin.Begin);
-                //}
+                var requestPipe = new Pipe();
 
                 _ = Task.Run(async () =>
                 {

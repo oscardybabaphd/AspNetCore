@@ -206,7 +206,7 @@ namespace Microsoft.AspNetCore.TestHost
             });
 
             // Act
-            var response = await client.SendAsync(httpRequest).WithTimeout();
+            var response = await client.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead).WithTimeout();
 
             await responseStartedSyncPoint.WaitForSyncPoint().WithTimeout();
             responseStartedSyncPoint.Continue();
@@ -233,7 +233,7 @@ namespace Microsoft.AspNetCore.TestHost
 
             // No more response content
             length = await responseContent.ReadAsync(buffer).AsTask().WithTimeout();
-            Assert.Equal(-1, length);
+            Assert.Equal(0, length);
         }
 
         private class PushContent : HttpContent

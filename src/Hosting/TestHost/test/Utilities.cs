@@ -9,7 +9,7 @@ namespace Microsoft.AspNetCore.TestHost
 {
     internal static class Utilities
     {
-        internal static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(1);
+        internal static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(15);
 
         internal static Task<T> WithTimeout<T>(this Task<T> task) => task.TimeoutAfter(DefaultTimeout);
 
