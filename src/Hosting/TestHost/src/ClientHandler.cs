@@ -75,9 +75,8 @@ namespace Microsoft.AspNetCore.TestHost
                 {
                     if (requestContent is StreamContent)
                     {
-                        // This is odd but required for backwards compat.
-                        // If StreamContent is passed in then seek to beginning.
-                        // ReadAsStreamAsync doesn't block. It will return the inner stream.
+                        // This is odd but required for backwards compat. If StreamContent is passed in then seek to beginning.
+                        // This is safe because StreamContent.ReadAsStreamAsync doesn't block. It will return the inner stream.
                         var body = await requestContent.ReadAsStreamAsync();
                         if (body.CanSeek)
                         {
