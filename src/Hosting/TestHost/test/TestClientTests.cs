@@ -244,6 +244,7 @@ namespace Microsoft.AspNetCore.TestHost
             var responseStartedSyncPoint = new SyncPoint();
             var responseReadSyncPoint = new SyncPoint();
             var responseEndingSyncPoint = new SyncPoint();
+            var requestStreamSyncPoint = new SyncPoint();
             var readCanceled = false;
 
             RequestDelegate appDelegate = async ctx =>
@@ -274,7 +275,6 @@ namespace Microsoft.AspNetCore.TestHost
             };
 
             Stream requestStream = null;
-            var requestCompleteTcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             var builder = new WebHostBuilder().Configure(app => app.Run(appDelegate));
             var server = new TestServer(builder);
@@ -288,7 +288,7 @@ namespace Microsoft.AspNetCore.TestHost
                 await stream.FlushAsync();
 
                 requestStream = stream;
-                await requestCompleteTcs.Task;
+                await requestStreamSyncPoint.WaitToContinue();
             });
 
             // Act
@@ -300,6 +300,11 @@ namespace Microsoft.AspNetCore.TestHost
             var responseContent = await response.Content.ReadAsStreamAsync().WithTimeout();
 
             // Assert
+
+            // Ensure request stream has started
+            await requestStreamSyncPoint.WaitForSyncPoint();
+
+            // Write to request
             await requestStream.WriteAsync(Encoding.UTF8.GetBytes("SENT")).AsTask().WithTimeout();
             await requestStream.FlushAsync().WithTimeout();
             await responseReadSyncPoint.WaitForSyncPoint().WithTimeout();
