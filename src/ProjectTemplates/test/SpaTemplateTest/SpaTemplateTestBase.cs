@@ -293,6 +293,7 @@ namespace Templates.Test.SpaTemplateTest
                 }
 
                 // Can navigate to the 'fetch data' page
+                Thread.Sleep(5000);
                 browser.Contains("fetch-data", () => browser.Url);
                 browser.Equal("Weather forecast", () => browser.FindElement(By.TagName("h1")).Text);
 
