@@ -4,6 +4,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Blazor.Http;
 using Microsoft.AspNetCore.Blazor.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
@@ -16,6 +17,12 @@ namespace Microsoft.AspNetCore.Blazor.Hosting
 
         private IServiceScope _scope;
         private WebAssemblyRenderer _renderer;
+
+        static WebAssemblyHost()
+        {
+            // This default most closely matches what web developers expect
+            WebAssemblyHttpMessageHandlerOptions.DefaultCredentials = FetchCredentialsOption.SameOrigin;
+        }
 
         public WebAssemblyHost(IServiceProvider services, IJSRuntime runtime)
         {
